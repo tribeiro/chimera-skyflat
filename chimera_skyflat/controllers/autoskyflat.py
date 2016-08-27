@@ -57,7 +57,7 @@ class AutoSkyFlat(ChimeraObject, IAutoSkyFlat):
     def _takeImage(self, exptime, filter, download=False):
 
         cam = self._getCam()
-        if self["filterwheel"] is not None:
+        if self["filterwheel"] is not None and filter is not None:
             fw = self._getFilterWheel()
             fw.setFilter(filter)
         self.log.debug("Start frame")
@@ -309,6 +309,18 @@ class AutoSkyFlat(ChimeraObject, IAutoSkyFlat):
                 elif n_wait_iter > self["max_wait_iter"]:
                     self.log.warning("Maximum number of wait iterations reached. Giving up.")
                     return False
+                elif n_wait_iter > self["max_wait_iter"]/2:
+                    self.log.warning('Taking too long to achieve exposure time! Recalculating correction factor')
+                    filename, image = self._takeImage(exptime=self["exptime_max"], filter=None, download=True)
+                    sky_level = self.getSkyLevel(filename, image)
+                    correction_factor += sky_level / self["exptime_max"] - self["idealCounts"] / self["exptime_max"]
+                    self.log.debug('Done taking image, average counts = %f. '
+                                   'New correction factor = %f' % (sky_level, correction_factor))
+                    intCounts = 0.0
+                    exposure_time = 0
+                    initialTime = site.ut()
+                    sun_altitude = site.sunpos(initialTime).alt
+                    n_wait_iter += 1
                 else:  # dawn
                     self.log.info(
                         "Computed exposure time {} exceeded limit of {}. Waiting 6 sec...".format(exposure_time,
